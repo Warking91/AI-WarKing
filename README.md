@@ -1,3 +1,5 @@
+# AI-WarKing
+Local AI Bridge for Copilot – Python automation, GUI, NLU, offline assistant.
 🔥 1. Natural Language → Automatic AI Actions (NLU Parser)
 AI WarKing understands commands like a human:
 
