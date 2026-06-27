@@ -17,7 +17,7 @@ os.makedirs(SESSIONS, exist_ok=True)
 
 BASE_DIR = None
 session  = {"id": str(uuid.uuid4()), "started": datetime.datetime.now().isoformat(), "messages": []}
-memory   = []          # kratkotrajna memorija, max 30
+memory   = []
 MEM_MAX  = 30
 mem_lock = threading.Lock()
 state    = {"status": "running", "paused": False, "error": None}
@@ -25,8 +25,114 @@ st_lock  = threading.Lock()
 
 _log_cb      = None
 _chat_cb     = None
-_last_file   = None   # zadnji fajl koji je korišten (kontekst)
-_pending     = {}     # čeka na dopunski input od korisnika
+_last_file   = None
+_pending     = {}
+
+# ── Jezik / Language ──────────────────────────────────────────────────────────
+LANG = "bs"   # "bs" = Bosanski/Hrvatski/Srpski  |  "en" = English
+
+STRINGS = {
+    "bs": {
+        "title_sub":    "Copilot Bridge",
+        "srv_dot":      "● 127.0.0.1:5000",
+        "folder_none":  "📁 nije izabran",
+        "btn_folder":   "📂 Folder",
+        "btn_new":      "＋ Novi",
+        "btn_save":     "💾 Spremi",
+        "btn_delete":   "🗑 Obriši",
+        "btn_run":      "▶ Run .py",
+        "btn_refresh":  "🔄 Osvježi",
+        "btn_sessions": "📋 Sesije",
+        "btn_client":   "🤖 Klijent",
+        "btn_dark":     "☀ Light",
+        "btn_light":    "🌙 Dark",
+        "btn_lang":     "🌐 EN",
+        "tab_chat":     "  💬 Chat  ",
+        "tab_log":      "  📋 Log  ",
+        "tab_sess":     "  🗂 Sesije  ",
+        "exp_label":    "  EXPLORER",
+        "send_btn":     "↑",
+        "placeholder":  "Piši slobodno — napravi, pročitaj, pokreni...",
+        "status_ready": "Spreman. Izaberi folder i počni.",
+        "api_label":    "/copilot_api  ●  127.0.0.1:5000",
+        "sess_id":      "Sesija ID:",
+        "sess_msg":     "Poruke:",
+        "sess_mem":     "Memorija:",
+        "sess_total":   "Sesija (uk.):",
+        "sess_folder":  "Folder:",
+        "tab_label_none": "  —  ",
+        "dlg_folder":   "Izaberi projekt folder",
+        "dlg_newfile":  "Novi fajl",
+        "dlg_newfile_q":"Ime fajla:",
+        "dlg_delete":   "Obriši",
+        "dlg_delete_q": "Obrisati {}?",
+        "err_nofile":   "Otvori .py fajl.",
+        "err_nofolder": "Izaberi folder.",
+        "err_title":    "Greška",
+        "welcome": (
+            "**Zdravo! Ja sam AI WarKing.** 🟢\n\n"
+            "Izaberi projekt folder (📂 Folder), pa mi slobodno reci šta radiš.\n\n"
+            "Primjeri:\n"
+            "• `napravi test.txt i unutra napiši Hello World`\n"
+            "• `pročitaj main.py`\n"
+            "• `pokreni main.py`\n"
+            "• `list`\n\n"
+            "Pišeš normalno — bez prefiksa, bez pravila."
+        ),
+    },
+    "en": {
+        "title_sub":    "Copilot Bridge",
+        "srv_dot":      "● 127.0.0.1:5000",
+        "folder_none":  "📁 no folder",
+        "btn_folder":   "📂 Folder",
+        "btn_new":      "＋ New",
+        "btn_save":     "💾 Save",
+        "btn_delete":   "🗑 Delete",
+        "btn_run":      "▶ Run .py",
+        "btn_refresh":  "🔄 Refresh",
+        "btn_sessions": "📋 Sessions",
+        "btn_client":   "🤖 Client",
+        "btn_dark":     "☀ Light",
+        "btn_light":    "🌙 Dark",
+        "btn_lang":     "🌐 BS",
+        "tab_chat":     "  💬 Chat  ",
+        "tab_log":      "  📋 Log  ",
+        "tab_sess":     "  🗂 Sessions  ",
+        "exp_label":    "  EXPLORER",
+        "send_btn":     "↑",
+        "placeholder":  "Type freely — create, read, run...",
+        "status_ready": "Ready. Select a folder to start.",
+        "api_label":    "/copilot_api  ●  127.0.0.1:5000",
+        "sess_id":      "Session ID:",
+        "sess_msg":     "Messages:",
+        "sess_mem":     "Memory:",
+        "sess_total":   "Sessions (total):",
+        "sess_folder":  "Folder:",
+        "tab_label_none": "  —  ",
+        "dlg_folder":   "Select project folder",
+        "dlg_newfile":  "New file",
+        "dlg_newfile_q":"File name:",
+        "dlg_delete":   "Delete",
+        "dlg_delete_q": "Delete {}?",
+        "err_nofile":   "Open a .py file first.",
+        "err_nofolder": "Select a folder first.",
+        "err_title":    "Error",
+        "welcome": (
+            "**Hello! I'm AI WarKing.** 🟢\n\n"
+            "Select a project folder (📂 Folder), then just tell me what you need.\n\n"
+            "Examples:\n"
+            "• `create test.txt and write Hello World inside`\n"
+            "• `read main.py`\n"
+            "• `run main.py`\n"
+            "• `list`\n\n"
+            "Type naturally — no prefixes, no special syntax."
+        ),
+    },
+}
+
+def t(key):
+    """Vrati string za trenutni jezik."""
+    return STRINGS[LANG].get(key, STRINGS["bs"].get(key, key))
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Core helpers
@@ -413,12 +519,20 @@ def _extract_line(error_text):
     return m.group(1) if m else "?"
 
 
-PERSONALITY = [
-    "Hej, tu sam. Šta radiš?",
-    "Spreman! Daj mi neku komandu.",
-    "Na usluzi. Dev mod: ON. 🟢",
-    "Ovdje sam. Šta kujemo danas?",
-]
+PERSONALITY = {
+    "bs": [
+        "Hej, tu sam. Šta radiš?",
+        "Spreman! Daj mi neku komandu.",
+        "Na usluzi. Dev mod: ON. 🟢",
+        "Ovdje sam. Šta kujemo danas?",
+    ],
+    "en": [
+        "Hey, I'm here. What are you building?",
+        "Ready! Give me a command.",
+        "At your service. Dev mode: ON. 🟢",
+        "Here. What are we shipping today?",
+    ],
+}
 
 def ai_respond(intent):
     global _last_file, _pending
@@ -428,75 +542,88 @@ def ai_respond(intent):
     raw     = intent["raw"]
     lower   = raw.lower()
 
+    en = (LANG == "en")
+
     # ── LIST ──────────────────────────────────────────────────────────────────
     if action == "list":
         files = project_files()
         if not files:
-            return "📁 Folder je prazan ili nije izabran."
-        py  = [f for f in files if f.endswith(".py")]
+            return ("📁 Folder is empty or not selected." if en else
+                    "📁 Folder je prazan ili nije izabran.")
         ext = {}
         for f in files:
-            e = os.path.splitext(f)[1] or "ostalo"
+            e = os.path.splitext(f)[1] or ("other" if en else "ostalo")
             ext[e] = ext.get(e, 0) + 1
         ext_str = "  ".join(f"{v}×{k}" for k, v in sorted(ext.items()))
-        tree = "\n".join(f"  {'🐍' if f.endswith('.py') else '📄'} {f}" for f in files[:40])
-        suffix = f"\n  ... i još {len(files)-40}" if len(files) > 40 else ""
-        return f"📁 **{os.path.basename(BASE_DIR)}** — {len(files)} fajlova ({ext_str})\n\n{tree}{suffix}"
+        tree    = "\n".join(f"  {'🐍' if f.endswith('.py') else '📄'} {f}" for f in files[:40])
+        more    = (f"\n  ... and {len(files)-40} more" if en else
+                   f"\n  ... i još {len(files)-40}") if len(files) > 40 else ""
+        label   = "files" if en else "fajlova"
+        return f"📁 **{os.path.basename(BASE_DIR)}** — {len(files)} {label} ({ext_str})\n\n{tree}{more}"
 
     # ── ASK FILENAME ─────────────────────────────────────────────────────────
     if action == "ask_filename":
         _pending = {"waiting": "filename", "content": content}
-        return "Koji naziv fajla? (npr. `test.py`, `podaci.txt`, `index.html`)"
+        return ("What filename? (e.g. `test.py`, `data.txt`, `index.html`)" if en else
+                "Koji naziv fajla? (npr. `test.py`, `podaci.txt`, `index.html`)")
 
     # ── WRITE / CREATE ────────────────────────────────────────────────────────
     if action == "write":
         if not path:
-            return "Ne znam koji fajl. Reci npr: *napravi hello.txt i unutra napiši Hello World*"
+            return ("I don't know which file. Try: *create hello.txt and write Hello World inside*" if en else
+                    "Ne znam koji fajl. Reci npr: *napravi hello.txt i unutra napiši Hello World*")
         try:
             _, nbytes = do_write(path, content)
             _last_file = path
             log(f"[WRITE] {path} ({nbytes} ch)")
-            return (
-                f"✅ **{path}** kreiran/ažuriran ({nbytes} znakova).\n"
-                f"{'Sadržaj: `' + content[:60] + ('...' if len(content)>60 else '') + '`' if content else 'Fajl je prazan.'}"
-            )
+            preview = ('Content: `' + content[:60] + ('...' if len(content) > 60 else '') + '`') if content else \
+                      ("File is empty." if en else "Fajl je prazan.")
+            label = "created/updated" if en else "kreiran/ažuriran"
+            chars  = "characters" if en else "znakova"
+            return f"✅ **{path}** {label} ({nbytes} {chars}).\n{preview}"
         except Exception as e:
-            return f"❌ Greška pri pisanju u `{path}`: {e}"
+            return (f"❌ Error writing `{path}`: {e}" if en else
+                    f"❌ Greška pri pisanju u `{path}`: {e}")
 
     # ── READ ──────────────────────────────────────────────────────────────────
     if action == "read":
         try:
             txt = do_read(path)
             _last_file = path
-            lines = txt.splitlines()
+            lines   = txt.splitlines()
             preview = "\n".join(lines[:30])
-            suffix  = f"\n\n...({len(lines)-30} linija više)" if len(lines) > 30 else ""
-            return f"📄 **{path}** ({len(lines)} linija):\n\n```\n{preview}\n```{suffix}"
+            more    = (f"\n\n...({len(lines)-30} more lines)" if en else
+                       f"\n\n...({len(lines)-30} linija više)") if len(lines) > 30 else ""
+            label   = "lines" if en else "linija"
+            return f"📄 **{path}** ({len(lines)} {label}):\n\n```\n{preview}\n```{more}"
         except FileNotFoundError:
-            return f"❌ Fajl `{path}` ne postoji. Provjeri ime ili napiši `list` da vidiš šta ima."
+            return (f"❌ File `{path}` not found. Type `list` to see what's here." if en else
+                    f"❌ Fajl `{path}` ne postoji. Provjeri ime ili napiši `list` da vidiš šta ima.")
         except Exception as e:
-            return f"❌ Greška: {e}"
+            return f"❌ Error: {e}"
 
     # ── RUN ───────────────────────────────────────────────────────────────────
     if action == "run":
         if not path.endswith(".py"):
-            return f"❌ `{path}` nije Python fajl. Mogu pokrenuti samo `.py` fajlove."
+            return (f"❌ `{path}` is not a Python file. I can only run `.py` files." if en else
+                    f"❌ `{path}` nije Python fajl. Mogu pokrenuti samo `.py` fajlove.")
         try:
             _last_file = path
             stdout, stderr, rc = do_run(path)
             if rc == 0:
-                out = stdout[:800] if stdout else "(nema outputa)"
-                return f"▶ **{path}** — završio OK (rc=0)\n\n```\n{out}\n```"
+                out = stdout[:800] if stdout else ("(no output)" if en else "(nema outputa)")
+                ok  = "finished OK" if en else "završio OK"
+                return f"▶ **{path}** — {ok} (rc=0)\n\n```\n{out}\n```"
             else:
-                err = (stderr or stdout)[:800]
-                return (
-                    f"💥 **{path}** — greška (rc={rc})\n\n```\n{err}\n```\n\n"
-                    f"Napiši `popravi {path}` da probam automatski fixati."
-                )
+                err  = (stderr or stdout)[:800]
+                hint = (f"Type `fix {path}` to auto-fix." if en else
+                        f"Napiši `popravi {path}` da probam automatski fixati.")
+                fail = "error" if en else "greška"
+                return f"💥 **{path}** — {fail} (rc={rc})\n\n```\n{err}\n```\n\n{hint}"
         except FileNotFoundError:
-            return f"❌ `{path}` ne postoji."
+            return (f"❌ `{path}` not found." if en else f"❌ `{path}` ne postoji.")
         except Exception as e:
-            return f"❌ Greška pri pokretanju: {e}"
+            return (f"❌ Run error: {e}" if en else f"❌ Greška pri pokretanju: {e}")
 
     # ── FIX ───────────────────────────────────────────────────────────────────
     if action == "fix":
@@ -506,115 +633,166 @@ def ai_respond(intent):
     if action == "delete":
         try:
             do_delete(path)
-            return f"🗑 **{path}** obrisan."
+            return (f"🗑 **{path}** deleted." if en else f"🗑 **{path}** obrisan.")
         except FileNotFoundError:
-            return f"❌ `{path}` ne postoji."
+            return (f"❌ `{path}` not found." if en else f"❌ `{path}` ne postoji.")
         except Exception as e:
-            return f"❌ Greška: {e}"
+            return f"❌ Error: {e}"
 
     # ── MKDIR ─────────────────────────────────────────────────────────────────
     if action == "mkdir":
         try:
             do_mkdir(path)
-            return f"📁 Folder **{path}** kreiran."
+            return (f"📁 Folder **{path}** created." if en else f"📁 Folder **{path}** kreiran.")
         except Exception as e:
-            return f"❌ Greška: {e}"
+            return f"❌ Error: {e}"
 
-    # ── CHAT — ličnost i razgovor ─────────────────────────────────────────────
+    # ── CHAT ──────────────────────────────────────────────────────────────────
     return _chat_brain(raw, lower)
 
 
 def _chat_brain(raw, lower):
-    """Razgovor, šale, pitanja, ličnost."""
-    # Pozdrav
+    """Razgovor / Conversation — bilingual ličnost."""
+    en = (LANG == "en")
+
+    # Pozdrav / Greeting
     if re.search(r'\b(zdravo|hej|ej|cao|čao|hi|hello|hey|bok|oi|yo)\b', lower):
         folder = os.path.basename(BASE_DIR) if BASE_DIR else None
         files  = project_files()
-        ctx    = f"Projekt: **{folder}** ({len(files)} fajlova)" if folder else "Folder nije izabran."
-        return f"{random.choice(PERSONALITY)}\n{ctx}"
+        if en:
+            ctx = f"Project: **{folder}** ({len(files)} files)" if folder else "No folder selected."
+        else:
+            ctx = f"Projekt: **{folder}** ({len(files)} fajlova)" if folder else "Folder nije izabran."
+        return f"{random.choice(PERSONALITY[LANG])}\n{ctx}"
 
-    # Jesi tu
-    if re.search(r'jesi\s+(li\s+)?tu|ima\s+ko|slusas|slušaš', lower):
-        return "Tu sam, slušam. 👂 Daj komandu ili pitaj šta hoćeš."
+    # Jesi tu / Are you there
+    if re.search(r'jesi\s+(li\s+)?tu|ima\s+ko|slusas|slušaš|are\s+you\s+there|you\s+there', lower):
+        return ("Here, listening. 👂 Give me a command or ask anything." if en else
+                "Tu sam, slušam. 👂 Daj komandu ili pitaj šta hoćeš.")
 
     # Status
-    if re.search(r'\b(status|kako\s+si|radi\s+li|sve\s+ok|imaš\s+greške)\b', lower):
+    if re.search(r'\b(status|kako\s+si|radi\s+li|sve\s+ok|how\s+are\s+you|are\s+you\s+ok)\b', lower):
         with st_lock: st = state.copy()
         files = project_files()
         with mem_lock: mem = len(memory)
-        return (
-            f"**Status:** {st['status'].upper()} {'⏸' if st['paused'] else '🟢'}\n"
-            f"**Sesija:** {session['id'][:8]} — {len(session['messages'])} poruka\n"
-            f"**Memorija:** {mem}/{MEM_MAX}\n"
-            f"**Projekt:** {os.path.basename(BASE_DIR) if BASE_DIR else 'nije izabran'} "
-            f"({len(files)} fajlova)"
-        )
+        if en:
+            proj = os.path.basename(BASE_DIR) if BASE_DIR else "not selected"
+            return (
+                f"**Status:** {st['status'].upper()} {'⏸' if st['paused'] else '🟢'}\n"
+                f"**Session:** {session['id'][:8]} — {len(session['messages'])} messages\n"
+                f"**Memory:** {mem}/{MEM_MAX}\n"
+                f"**Project:** {proj} ({len(files)} files)"
+            )
+        else:
+            proj = os.path.basename(BASE_DIR) if BASE_DIR else "nije izabran"
+            return (
+                f"**Status:** {st['status'].upper()} {'⏸' if st['paused'] else '🟢'}\n"
+                f"**Sesija:** {session['id'][:8]} — {len(session['messages'])} poruka\n"
+                f"**Memorija:** {mem}/{MEM_MAX}\n"
+                f"**Projekt:** {proj} ({len(files)} fajlova)"
+            )
 
     # Help
-    if re.search(r'\b(help|pomozi|šta\s+možeš|sta\s+mozes|komande|naredbe|uputa)\b', lower):
-        return (
-            "**Šta mogu:**\n\n"
-            "📁 `list` — prikaži sve fajlove\n"
-            "📄 `pročitaj main.py` — sadržaj fajla\n"
-            "✍ `napravi test.txt i unutra napiši Hello` — novi fajl\n"
-            "✍ `napiši u main.py: <kod>` — upiši sadržaj\n"
-            "▶ `pokreni main.py` — pokreni Python\n"
-            "🔧 `popravi main.py` — auto-fix grešaka\n"
-            "🗑 `obriši old.py` — brisanje\n"
-            "📁 `mkdir src/utils` — novi folder\n\n"
-            "Pišeš slobodno, bez ikakvih prefiksa. Razumijem bosanski, engleski, mješano."
-        )
+    if re.search(r'\b(help|pomozi|šta\s+možeš|sta\s+mozes|komande|naredbe|uputa|commands|what\s+can\s+you)\b', lower):
+        if en:
+            return (
+                "**What I can do:**\n\n"
+                "📁 `list` — show all files\n"
+                "📄 `read main.py` — show file content\n"
+                "✍ `create test.txt and write Hello inside` — new file\n"
+                "✍ `write to main.py: <code>` — write content\n"
+                "▶ `run main.py` — run Python\n"
+                "🔧 `fix main.py` — auto-fix errors\n"
+                "🗑 `delete old.py` — delete file\n"
+                "📁 `mkdir src/utils` — new folder\n\n"
+                "Type naturally — no prefixes needed. I understand Bosnian and English."
+            )
+        else:
+            return (
+                "**Šta mogu:**\n\n"
+                "📁 `list` — prikaži sve fajlove\n"
+                "📄 `pročitaj main.py` — sadržaj fajla\n"
+                "✍ `napravi test.txt i unutra napiši Hello` — novi fajl\n"
+                "✍ `napiši u main.py: <kod>` — upiši sadržaj\n"
+                "▶ `pokreni main.py` — pokreni Python\n"
+                "🔧 `popravi main.py` — auto-fix grešaka\n"
+                "🗑 `obriši old.py` — brisanje\n"
+                "📁 `mkdir src/utils` — novi folder\n\n"
+                "Pišeš slobodno, bez ikakvih prefiksa. Razumijem bosanski, engleski, mješano."
+            )
 
-    # Pitanja o projektu
-    if re.search(r'(koliko\s+fajlova|koji\s+fajlovi|šta\s+ima\s+u\s+projektu|sta\s+ima\s+u|projekt)', lower):
+    # Projekat info / Project info
+    if re.search(r'(koliko\s+fajlova|koji\s+fajlovi|how\s+many\s+files|what\s+files|project\s+info|projekt)', lower):
         files = project_files()
         if not files:
-            return "Folder nije izabran ili je prazan."
+            return ("No folder selected or folder is empty." if en else
+                    "Folder nije izabran ili je prazan.")
         ext = {}
         for f in files:
-            e = os.path.splitext(f)[1] or "ostalo"
+            e = os.path.splitext(f)[1] or ("other" if en else "ostalo")
             ext[e] = ext.get(e, 0) + 1
+        label = "Files" if en else "Fajlova"
         return (
             f"📁 **{os.path.basename(BASE_DIR)}**\n"
-            f"Fajlova: {len(files)}\n"
+            f"{label}: {len(files)}\n"
             + "\n".join(f"  {v}× `{k}`" for k, v in sorted(ext.items()))
         )
 
-    # Zahvala
-    if re.search(r'\b(hvala|thanks|super|odlično|odlicno|bravo|savrseno|savršeno|perfektno)\b', lower):
-        return random.choice(["Nema na čemu! 🟢", "Uvijek! Daj još nešto.", "To je to! 💪"])
+    # Zahvala / Thanks
+    if re.search(r'\b(hvala|thanks|thank\s+you|super|odlično|odlicno|bravo|perfect|perfektno)\b', lower):
+        return random.choice((
+            ["Nice! 🟢", "Always! Give me more.", "That's it! 💪"] if en else
+            ["Nema na čemu! 🟢", "Uvijek! Daj još nešto.", "To je to! 💪"]
+        ))
 
-    # Šale
-    if re.search(r'(vic|šalu|šala|nasmiji|smijesno|smiješno|funny|joke)', lower):
-        vici = [
-            "Zašto Python programer nosi naočale?\nJer ne može vidjet **sharp**! 🐍",
-            "Koliko programera treba da promijeni žarulju?\nNijedan — to je **hardware** problem.",
-            "Rekursija:\n> Vidi 'Rekursija'.",
-            "Bug nije greška — to je **undocumented feature**. 😄",
+    # Šale / Jokes
+    if re.search(r'(vic|šalu|šala|nasmiji|smijesno|funny|joke|humor)', lower):
+        jokes = [
+            "Why do Python devs wear glasses?\nBecause they can't **C**! 🐍",
+            "How many programmers does it take to change a lightbulb?\nNone — that's a **hardware** problem.",
+            "Recursion:\n> See 'Recursion'.",
+            "A bug is not a mistake — it's an **undocumented feature**. 😄",
             "`99 little bugs in the code,\n99 little bugs...\nTake one down, patch it around —\n127 little bugs in the code.`",
         ]
-        return random.choice(vici)
+        if not en:
+            jokes[0] = "Zašto Python programer nosi naočale?\nJer ne može vidjet **sharp**! 🐍"
+            jokes[1] = "Koliko programera treba da promijeni žarulju?\nNijedan — to je **hardware** problem."
+        return random.choice(jokes)
 
-    # Pitanje s upitnikom
+    # Pitanje / Question
     if "?" in raw:
         with mem_lock: hist = list(memory)
-        ctx = f"\n(Zadnja tema: *{hist[-2]['content'][:50]}*)" if len(hist) >= 2 else ""
-        return (
-            f"Nisam siguran šta tačno pitaš.{ctx}\n\n"
-            "Probaj konkretno — npr. `list`, `pročitaj main.py`, `napravi test.txt`.\n"
-            "Ili napiši `help` za sve što mogu."
-        )
+        if en:
+            ctx = f"\n(Last topic: *{hist[-2]['content'][:50]}*)" if len(hist) >= 2 else ""
+            return (
+                f"Not sure what you're asking.{ctx}\n\n"
+                "Try something specific — e.g. `list`, `read main.py`, `create test.txt`.\n"
+                "Or type `help` for everything I can do."
+            )
+        else:
+            ctx = f"\n(Zadnja tema: *{hist[-2]['content'][:50]}*)" if len(hist) >= 2 else ""
+            return (
+                f"Nisam siguran šta tačno pitaš.{ctx}\n\n"
+                "Probaj konkretno — npr. `list`, `pročitaj main.py`, `napravi test.txt`.\n"
+                "Ili napiši `help` za sve što mogu."
+            )
 
     # Fallback
     with mem_lock: hist = list(memory)
-    ctx = ""
-    if len(hist) >= 2:
-        ctx = f"\n*(Kontekst: {hist[-2]['content'][:60]})*"
-    return (
-        f"Nisam skužio šta hoćeš s: *\"{raw[:60]}\"*{ctx}\n\n"
-        "Ako hoćeš raditi sa fajlovima — reci mi ime fajla i šta da radim s njim.\n"
-        "Napiši `help` za sve komande."
-    )
+    if en:
+        ctx = f"\n*(Context: {hist[-2]['content'][:60]})*" if len(hist) >= 2 else ""
+        return (
+            f"Didn't catch that: *\"{raw[:60]}\"*{ctx}\n\n"
+            "If you want to work with files — tell me the filename and what to do.\n"
+            "Type `help` for all commands."
+        )
+    else:
+        ctx = f"\n*(Kontekst: {hist[-2]['content'][:60]})*" if len(hist) >= 2 else ""
+        return (
+            f"Nisam skužio šta hoćeš s: *\"{raw[:60]}\"*{ctx}\n\n"
+            "Ako hoćeš raditi sa fajlovima — reci mi ime fajla i šta da radim s njim.\n"
+            "Napiši `help` za sve komande."
+        )
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Main handler
@@ -823,7 +1001,17 @@ def start_gui():
         current_theme["dark"] = not current_theme["dark"]
         T = DARK if current_theme["dark"] else LIGHT
         apply_theme(T)
-        theme_btn.configure(text="☀ Light" if current_theme["dark"] else "🌙 Dark")
+        _make_toolbar()
+
+    def toggle_lang():
+        global LANG
+        LANG = "en" if LANG == "bs" else "bs"
+        _make_toolbar()
+        status_lbl.configure(text=t("status_ready"))
+        api_lbl.configure(text=t("api_label"))
+        switched = ("Language switched to English 🇬🇧" if LANG == "en"
+                    else "Jezik promijenjen na Bosanski 🇧🇦")
+        root.after(0, lambda: _render_chat("ai_warking", switched))
 
     # ── Helpers ───────────────────────────────────────────────────────────────
     current_file = tk.StringVar()
@@ -972,22 +1160,52 @@ def start_gui():
     def open_client():
         subprocess.Popen(["cmd","/k","python copilot_client.py"], cwd=ROOT_DIR)
 
-    for text, cmd, kw in [
-        ("📂 Folder",   choose_folder, {"bg":T["accent"],"fg":"#fff"}),
-        ("＋ Novi",      new_file,      {}),
-        ("💾 Spremi",   save_file,     {}),
-        ("🗑 Obriši",  delete_file,   {}),
-        ("▶ Run .py",  run_file,      {"bg":"#1b3a24","fg":T["fg3"]}),
-        ("🔄 Osvježi", refresh_tree,  {}),
-        ("📋 Sesije",  lambda: None,  {}),
-        ("🤖 Klijent", open_client,   {"bg":"#1a3a1a","fg":T["fg3"]}),
-    ]:
-        b = mk_btn(toolbar, text, cmd, **kw)
-        b.pack(side="left", padx=2, pady=4)
+    # Toolbar dugmad — reference čuvamo da ih možemo relabeirati pri promjeni jezika
+    _toolbar_btns = {}
 
-    ttk.Separator(toolbar, orient="vertical").pack(side="left", fill="y", padx=6, pady=6)
-    theme_btn = mk_btn(toolbar, "☀ Light", toggle_theme)
-    theme_btn.pack(side="left", padx=2, pady=4)
+    def _make_toolbar():
+        for w in toolbar.winfo_children():
+            w.destroy()
+        tk.Frame(toolbar, bg=T["accent"], width=3).pack(side="left", fill="y")
+
+        btn_defs = [
+            ("folder",   t("btn_folder"),  choose_folder, {"bg": T["accent"], "fg": "#fff"}),
+            ("new",      t("btn_new"),     new_file,      {}),
+            ("save",     t("btn_save"),    save_file,     {}),
+            ("delete",   t("btn_delete"),  delete_file,   {}),
+            ("run",      t("btn_run"),     run_file,      {"bg": "#1b3a24", "fg": T["fg3"]}),
+            ("refresh",  t("btn_refresh"), refresh_tree,  {}),
+            ("client",   t("btn_client"),  open_client,   {"bg": "#1a3a1a", "fg": T["fg3"]}),
+        ]
+        for key, txt, cmd, kw in btn_defs:
+            b = mk_btn(toolbar, txt, cmd, **kw)
+            b.pack(side="left", padx=2, pady=4)
+            _toolbar_btns[key] = b
+
+        ttk.Separator(toolbar, orient="vertical").pack(side="left", fill="y", padx=6, pady=6)
+
+        # Theme toggle
+        _toolbar_btns["theme"] = mk_btn(toolbar, t("btn_dark"), toggle_theme)
+        _toolbar_btns["theme"].pack(side="left", padx=2, pady=4)
+
+        # Language toggle
+        _toolbar_btns["lang"] = mk_btn(toolbar, t("btn_lang"), toggle_lang,
+                                        bg="#1a1a3a", fg="#80b0ff")
+        _toolbar_btns["lang"].pack(side="left", padx=2, pady=4)
+
+    def _refresh_toolbar_labels():
+        _make_toolbar()
+
+    _make_toolbar()
+
+    # Convenience refs (used below)
+    def theme_btn_update():
+        if "theme" in _toolbar_btns:
+            _toolbar_btns["theme"].configure(
+                text=t("btn_dark") if current_theme["dark"] else t("btn_light"))
+    def lang_btn_update():
+        if "lang" in _toolbar_btns:
+            _toolbar_btns["lang"].configure(text=t("btn_lang"))
 
     root.bind("<Control-s>", lambda e: save_file())
 
